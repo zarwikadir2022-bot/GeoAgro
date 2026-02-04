@@ -1,5 +1,5 @@
 streamlit
-sentinelhub-py>=3.9.0
+sentinelhub>=3.10.0
 folium
 streamlit-folium
 matplotlib
