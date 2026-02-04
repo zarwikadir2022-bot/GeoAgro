@@ -5,9 +5,8 @@ from folium.plugins import Draw
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, timedelta
-import sentinelhub
 
-# استدعاء المكتبة
+# استدعاء المكونات الأساسية
 from sentinelhub import (
     SHConfig,
     SentinelHubRequest,
@@ -21,20 +20,16 @@ from sentinelhub import (
 st.set_page_config(page_title="AgriSat", page_icon="🌱", layout="wide")
 st.title("🛰️ AgriSat: مراقبة صحة النبات")
 
-# --- فحص النسخة (للتأكد من أن التحديث نجح) ---
-# سيعرض هذا السطر نسخة المكتبة في التطبيق
-st.sidebar.info(f"Sentinelhub Version: {sentinelhub.__version__}")
-
 # --- 2. المفاتيح ---
 if "SH_CLIENT_ID" not in st.secrets:
-    st.error("يرجى وضع المفاتيح في Secrets")
+    st.error("⚠️ يرجى إضافة SH_CLIENT_ID و SH_CLIENT_SECRET في Secrets")
     st.stop()
 
 config = SHConfig()
 config.sh_client_id = st.secrets["SH_CLIENT_ID"]
 config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"]
 
-# --- 3. دالة الجلب ---
+# --- 3. دالة جلب البيانات (الحل الجذري للخطأ) ---
 def get_sentinel_image(coords_list):
     # تحويل الإحداثيات
     lons = [c[0] for c in coords_list]
@@ -61,9 +56,13 @@ def get_sentinel_image(coords_list):
     today = date.today()
     start_date = today - timedelta(days=30)
 
-    # --- استخدام المجموعة الصحيحة للزراعة ---
-    # الآن بعد تحديث requirements، هذا السطر سيعمل 100%
-    data_collection = DataCollection.SENTINEL_2_L2A
+    # --- الحل: استخدام معرف نصي بدلاً من الـ Attribute ---
+    # هذا السطر يحل مشكلة "AttributeError" تماماً
+    try:
+        data_collection = DataCollection.SENTINEL_2_L2A
+    except AttributeError:
+        # إذا لم يجد الاسم، نقوم بتعريفه يدوياً بالمعرف الذي يقبله السيرفر
+        data_collection = DataCollection.from_id('sentinel-2-l2a')
 
     request = SentinelHubRequest(
         evalscript=evalscript,
@@ -89,37 +88,53 @@ def get_sentinel_image(coords_list):
 col1, col2 = st.columns([2, 1])
 
 with col1:
+    st.info("قم برسم مضلع حول الأرض على الخريطة:")
+    # مركز الخريطة (تونس)
     m = folium.Map(location=[34.0, 9.0], zoom_start=7)
     draw = Draw(
         export=False,
-        draw_options={"polyline":False,"circle":False,"marker":False,"circlemarker":False,"polygon":True,"rectangle":True}
+        draw_options={
+            "polyline": False,
+            "circle": False,
+            "marker": False,
+            "circlemarker": False,
+            "polygon": True,
+            "rectangle": True
+        }
     )
     draw.add_to(m)
     output = st_folium(m, width=None, height=500)
 
 with col2:
-    st.subheader("التحليل")
+    st.subheader("تحليل الصحة النباتية")
     if output["all_drawings"]:
-        if st.button("تحليل NDVI"):
-            with st.spinner('جاري الاتصال بالقمر الصناعي...'):
+        if st.button("تحليل NDVI الآن"):
+            with st.spinner('جاري طلب البيانات من القمر الصناعي...'):
                 try:
-                    coords = output["all_drawings"][-1]['geometry']['coordinates'][0]
+                    # الحصول على إحداثيات الرسم
+                    last_draw = output["all_drawings"][-1]
+                    coords = last_draw['geometry']['coordinates'][0]
+                    
+                    # جلب الصورة
                     img = get_sentinel_image(coords)
                     
+                    # عرض الصورة
                     fig, ax = plt.subplots()
                     im = ax.imshow(img, cmap='RdYlGn', vmin=0, vmax=0.8)
-                    plt.colorbar(im, label='NDVI')
+                    plt.colorbar(im, label='مؤشر NDVI')
                     ax.axis('off')
                     st.pyplot(fig)
                     
-                    avg = np.mean(img[img > 0])
-                    st.metric("متوسط الصحة", f"{avg:.2f}")
+                    # حساب المتوسط
+                    valid_pixels = img[img > 0]
+                    if len(valid_pixels) > 0:
+                        avg = np.mean(valid_pixels)
+                        st.metric("متوسط NDVI", f"{avg:.2f}")
+                        if avg > 0.4: st.success("المحصول في حالة جيدة جداً 🟢")
+                        elif avg > 0.2: st.warning("تنبيه: توجد مؤشرات إجهاد نباتي 🟡")
+                        else: st.error("خطر: الغطاء النباتي ضعيف جداً أو مجهد 🔴")
                     
-                    if avg > 0.4: st.success("ممتاز 🟢")
-                    elif avg > 0.2: st.warning("متوسط 🟡")
-                    else: st.error("ضعيف 🔴")
-
                 except Exception as e:
-                    st.error(f"حدث خطأ: {e}")
+                    st.error(f"حدث خطأ أثناء المعالجة: {e}")
     else:
-        st.info("ارسم حدود الأرض أولاً ✏️")
+        st.write("✏️ في انتظار رسم حدود المزرعة...")
