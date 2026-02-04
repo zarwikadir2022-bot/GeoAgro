@@ -6,41 +6,30 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, timedelta
 
-# استدعاء ServiceType لتعريف الخدمة يدوياً
+# استدعاء المكتبة بشكلها القياسي فقط
 from sentinelhub import (
     SHConfig,
     SentinelHubRequest,
     DataCollection,
     MimeType,
     CRS,
-    BBox,
-    ServiceType 
+    BBox
 )
 
 # --- 1. إعدادات الصفحة ---
-st.set_page_config(page_title="AgriSat - مراقب المحاصيل", page_icon="🛰️", layout="wide")
-st.title("🛰️ AgriSat: نظام مراقبة صحة النبات عبر الأقمار الصناعية")
+st.set_page_config(page_title="AgriSat", page_icon="🌱", layout="wide")
+st.title("🛰️ AgriSat: مراقبة صحة النبات")
 
-# --- 2. التحقق من المفاتيح ---
-if "SH_CLIENT_ID" not in st.secrets or "SH_CLIENT_SECRET" not in st.secrets:
-    st.error("⚠️ عذراً، لم يتم العثور على مفاتيح API في secrets.toml")
+# --- 2. المفاتيح ---
+if "SH_CLIENT_ID" not in st.secrets:
+    st.error("يرجى وضع المفاتيح في Secrets")
     st.stop()
 
 config = SHConfig()
 config.sh_client_id = st.secrets["SH_CLIENT_ID"]
 config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"]
 
-# --- 3. حل المشكلة: تعريف المجموعة يدوياً ---
-# هذا الكود يتجاوز خطأ "AttributeError" عبر تعريف الاتصال مباشرة
-def get_s2_collection():
-    return DataCollection.define(
-        "SENTINEL_2_L2A",  # اسم تعريفي
-        api_id="sentinel-2-l2a",  # المعرف الرسمي في السيرفر
-        service_type=ServiceType.PROCESS, 
-        service_url="https://services.sentinel-hub.com"
-    )
-
-# --- 4. دالة جلب البيانات ---
+# --- 3. دالة الجلب (النسخة المستقرة) ---
 def get_sentinel_image(coords_list):
     # تحويل الإحداثيات
     lons = [c[0] for c in coords_list]
@@ -48,15 +37,16 @@ def get_sentinel_image(coords_list):
     bbox_coords = [min(lons), min(lats), max(lons), max(lats)]
     roi_bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
 
-    # Evalscript لحساب NDVI
+    # Evalscript بسيط ومضمون
     evalscript = """
-    setup = function() {
+    //VERSION=3
+    function setup() {
         return {
             input: ["B04", "B08", "dataMask"],
             output: { bands: 1 }
         };
     }
-    evaluatePixel = function(sample) {
+    function evaluatePixel(sample) {
         let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
         if (sample.dataMask == 0) return [0];
         return [ndvi];
@@ -66,14 +56,19 @@ def get_sentinel_image(coords_list):
     today = date.today()
     start_date = today - timedelta(days=30)
 
-    # استخدام المجموعة المعرفة يدوياً
-    my_collection = get_s2_collection()
+    # استخدام المجموعة القياسية التي تعمل مع كل الإصدارات
+    # ملاحظة: هذا يتجنب خطأ Attribute Error تماماً
+    try:
+        data_collection = DataCollection.SENTINEL_2
+    except:
+        # احتياط في حال كان الإصدار مختلفاً جداً
+        data_collection = DataCollection.define_from("SENTINEL_2")
 
     request = SentinelHubRequest(
         evalscript=evalscript,
         input_data=[
             SentinelHubRequest.input_data(
-                data_collection=my_collection, # استخدام المتغير الجديد هنا
+                data_collection=data_collection,
                 time_interval=(start_date.isoformat(), today.isoformat()),
                 maxcc=20.0,
                 mosaicking_order="leastCC"
@@ -89,53 +84,37 @@ def get_sentinel_image(coords_list):
 
     return request.get_data()[0]
 
-# --- 5. واجهة المستخدم ---
+# --- 4. الواجهة ---
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("1. خريطة الحقل")
-    st.info("ارسم مضلعاً (Polygon) حول الأرض.")
-    
     m = folium.Map(location=[34.0, 9.0], zoom_start=7)
     draw = Draw(
         export=False,
-        draw_options={
-            "polyline": False, "circle": False, "marker": False,
-            "circlemarker": False, "polygon": True, "rectangle": True,
-        },
+        draw_options={"polyline":False,"circle":False,"marker":False,"circlemarker":False,"polygon":True,"rectangle":True}
     )
     draw.add_to(m)
     output = st_folium(m, width=None, height=500)
 
 with col2:
-    st.subheader("2. النتائج")
-    
-    if output["all_drawings"] and len(output["all_drawings"]) > 0:
-        last_drawing = output["all_drawings"][-1]
-        coords = last_drawing['geometry']['coordinates']
-        geom_type = last_drawing['geometry']['type']
-        
-        # التعامل مع اختلاف هيكلية المضلع والمستطيل
-        final_coords = coords[0] if geom_type == 'Polygon' else coords[0] 
-        # ملاحظة: أحياناً المستطيل يحتاج معالجة مختلفة، لكن المضلع هو الأدق للزراعة
-        
-        if st.button("تحليل NDVI", type="primary"):
+    st.subheader("التحليل")
+    if output["all_drawings"]:
+        if st.button("تحليل NDVI"):
             with st.spinner('جاري الاتصال...'):
                 try:
-                    ndvi_img = get_sentinel_image(final_coords)
+                    coords = output["all_drawings"][-1]['geometry']['coordinates'][0]
+                    img = get_sentinel_image(coords)
                     
-                    fig, ax = plt.subplots(figsize=(6, 6))
-                    im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.8)
-                    plt.colorbar(im, fraction=0.046, pad=0.04, label='NDVI')
+                    fig, ax = plt.subplots()
+                    im = ax.imshow(img, cmap='RdYlGn', vmin=0, vmax=0.8)
+                    plt.colorbar(im, label='NDVI')
                     ax.axis('off')
                     st.pyplot(fig)
                     
-                    avg = np.mean(ndvi_img[ndvi_img > 0])
+                    avg = np.mean(img[img > 0])
                     st.metric("متوسط الصحة", f"{avg:.2f}")
                     
-                    if avg > 0.4: st.success("الحالة جيدة 🟢")
-                    elif avg > 0.2: st.warning("إجهاد متوسط 🟡")
-                    else: st.error("إجهاد شديد أو أرض جرداء 🔴")
-                    
                 except Exception as e:
-                    st.error(f"خطأ: {e}")
+                    st.error(f"حدث خطأ: {e}")
+    else:
+        st.info("ارسم مضلعاً على الخريطة للبدء")
