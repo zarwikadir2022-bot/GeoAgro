@@ -70,8 +70,8 @@ def get_sentinel_image(coords_list):
         evalscript=evalscript,
         input_data=[
             SentinelHubRequest.input_data(
-                # --- التعديل هنا: استخدام L2A بدلاً من SENTINEL_2 ---
-                data_collection=DataCollection.SENTINEL_2_L2A,
+                # --- تم التصحيح: العودة إلى الخيار القياسي لضمان التوافق ---
+                data_collection=DataCollection.SENTINEL_2,
                 time_interval=(start_date.isoformat(), today.isoformat()),
                 maxcc=20.0,
                 mosaicking_order="leastCC"
@@ -150,7 +150,7 @@ with col2:
                         
                         st.markdown("### 📊 التقرير:")
                         if np.isnan(avg_ndvi):
-                             st.warning("المنطقة المحددة لا تحتوي على بيانات صالحة (قد تكون خارج نطاق الصورة).")
+                             st.warning("المنطقة المحددة لا تحتوي على بيانات صالحة.")
                         else:
                             st.metric(label="متوسط مؤشر الصحة (NDVI)", value=f"{avg_ndvi:.2f}")
 
