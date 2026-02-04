@@ -7,20 +7,48 @@ import numpy as np
 from datetime import date, timedelta
 from sentinelhub import SHConfig, SentinelHubRequest, MimeType, CRS, BBox
 
-# --- 1. Page Configuration & Modern UI ---
+# --- 1. Page Configuration & Ultra-Modern UI ---
 st.set_page_config(page_title="AgriSight Pro", page_icon="🛰️", layout="wide")
 
+# Custom CSS for Professional Dashboard Look
 st.markdown("""
     <style>
+    /* Main Background */
     .main { background-color: #0e1117; }
-    .stMetric { background-color: #1e2130; padding: 20px; border-radius: 12px; border: 1px solid #30363d; }
-    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #0078d4; color: white; font-weight: bold; border: none; }
-    .stButton>button:hover { background-color: #005a9e; }
+    
+    /* Highlighted Metric Card - Light/Modern version */
+    [data-testid="stMetric"] {
+        background-color: #f0f2f6; /* Lighter background for better contrast */
+        padding: 20px;
+        border-radius: 15px;
+        border: 2px solid #0078d4;
+        box-shadow: 0 4px 15px rgba(0, 120, 212, 0.2);
+    }
+    
+    /* Make the metric labels/values dark for contrast against light BG */
+    [data-testid="stMetricValue"] { color: #0e1117 !important; font-weight: bold; }
+    [data-testid="stMetricLabel"] { color: #31333F !important; }
+
+    .stButton>button { 
+        width: 100%; border-radius: 10px; height: 3.5em; 
+        background-color: #0078d4; color: white; font-weight: bold; border: none; 
+    }
+    .stButton>button:hover { background-color: #005a9e; box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
+    
     h1, h2, h3 { color: #ffffff; font-family: 'Segoe UI', sans-serif; }
+    
+    /* Result Box Styling */
+    .insight-card {
+        background-color: #1e2130;
+        padding: 20px;
+        border-radius: 12px;
+        border-left: 6px solid #28a745;
+        margin-top: 15px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. Authentication ---
+# --- 2. Configuration & Engine ---
 def get_sh_config():
     try:
         config = SHConfig()
@@ -31,7 +59,6 @@ def get_sh_config():
         st.error("🔑 API Credentials missing in Secrets!")
         st.stop()
 
-# --- 3. Analysis Engine ---
 def fetch_satellite_ndvi(coords_list):
     config = get_sh_config()
     lons, lats = [c[0] for c in coords_list], [c[1] for c in coords_list]
@@ -63,65 +90,77 @@ def fetch_satellite_ndvi(coords_list):
     raw_img = request.get_data()[0]
     return raw_img / 100 if np.max(raw_img) > 1.1 else raw_img
 
-# --- 4. Layout ---
+# --- 3. Sidebar ---
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/satellite-sending-signal.png")
     st.title("AgriSight Pro")
     st.markdown("---")
-    st.write("**Language:** English 🇺🇸")
-    st.write("**Mode:** Standard + Satellite")
+    st.write("Professional Vegetation Analysis")
+    st.caption("Version 2.5 - Stable")
 
+# --- 4. Main Layout ---
 col_map, col_dash = st.columns([1.6, 1])
 
 with col_map:
-    st.subheader("🗺️ Interactive Field Selection")
-    
-    # 1. Create Base Map (Standard View)
+    st.subheader("🗺️ Select Your Farm")
     m = folium.Map(location=[36.7, 10.2], zoom_start=12)
 
-    # 2. Add Satellite Layer (Hybrid/Clear View)
+    # Base Maps
+    folium.TileLayer('OpenStreetMap', name='Street Map').add_to(m)
     folium.TileLayer(
         tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attr='Esri World Imagery',
-        name='Satellite View',
-        control=True
+        name='Satellite Imagery',
     ).add_to(m)
 
-    # 3. Add Layer Control (This creates the button to switch maps)
     folium.LayerControl(position='topright').add_to(m)
     
-    # 4. Add Drawing Tools
     Draw(export=False, position='topleft', 
          draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
     
     map_output = st_folium(m, width="100%", height=600)
 
 with col_dash:
-    st.subheader("📊 Analytics Dashboard")
+    st.subheader("📊 Performance Metrics")
     
     if map_output["all_drawings"]:
-        st.success("Area Selected! Ready to analyze.")
-        if st.button("RUN ANALYSIS"):
-            with st.spinner('Syncing with Sentinel-2...'):
+        if st.button("EXECUTE ANALYSIS"):
+            with st.spinner('Calculating Biomass Index...'):
                 try:
                     raw_coords = map_output["all_drawings"][-1]['geometry']['coordinates'][0]
                     ndvi_data = fetch_satellite_ndvi(raw_coords)
                     
-                    st.markdown("#### Crop Health Index")
-                    fig, ax = plt.subplots(figsize=(6, 6))
+                    # 1. Visualization
+                    st.markdown("#### Crop Vitality Heatmap")
+                    fig, ax = plt.subplots(figsize=(6, 5))
                     im = ax.imshow(ndvi_data, cmap='RdYlGn', vmin=0, vmax=0.9)
-                    plt.colorbar(im, label="NDVI Index")
+                    plt.colorbar(im, label="NDVI Level")
                     ax.axis('off')
                     fig.patch.set_facecolor('#0e1117')
                     st.pyplot(fig)
                     
+                    # 2. Key Metrics with Light Background Card
                     avg_ndvi = np.mean(ndvi_data[ndvi_data > 0])
-                    st.metric("Average Health Score", f"{avg_ndvi:.2f}")
+                    st.markdown("---")
+                    
+                    # This section uses the CSS styled st.metric
+                    st.metric(label="AVERAGE HEALTH SCORE", value=f"{avg_ndvi:.2f}")
+                    
+                    # 3. Insights Card
+                    st.markdown(f"""
+                        <div class="insight-card">
+                            <h4 style="color:white; margin:0;">AI Insight</h4>
+                            <p style="color:#d1d1d1;">
+                                Score <b>{avg_ndvi:.2f}</b> indicates 
+                                {"Excellent vegetation density." if avg_ndvi > 0.5 else "Moderate stress detected."}
+                            </p>
+                        </div>
+                    """, unsafe_allow_html=True)
                     
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
     else:
-        st.info("👈 Use the polygon tool on the map to select a farm. You can switch to Satellite view using the button in the top-right corner of the map.")
+        st.info("👈 Please draw the farm boundaries on the map to begin analysis.")
 
 st.markdown("---")
-st.caption("© 2026 AgriSight Technologies Tunisia")
+st.caption("© 2026 AgriSight Technologies | Precision Agriculture Solutions")
