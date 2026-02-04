@@ -6,11 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, timedelta
 
-# استدعاء المكونات الأساسية
 from sentinelhub import (
     SHConfig,
     SentinelHubRequest,
-    DataCollection,
     MimeType,
     CRS,
     BBox
@@ -29,9 +27,9 @@ config = SHConfig()
 config.sh_client_id = st.secrets["SH_CLIENT_ID"]
 config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"]
 
-# --- 3. دالة جلب البيانات (الحل النهائي المضمون) ---
+# --- 3. دالة جلب البيانات (الطريقة المباشرة والآمنة) ---
 def get_sentinel_image(coords_list):
-    # تحويل الإحداثيات
+    # تحويل الإحداثيات إلى BBox
     lons = [c[0] for c in coords_list]
     lats = [c[1] for c in coords_list]
     bbox_coords = [min(lons), min(lats), max(lons), max(lats)]
@@ -56,26 +54,21 @@ def get_sentinel_image(coords_list):
     today = date.today()
     start_date = today - timedelta(days=30)
 
-    # --- الحل الجذري: تعريف المجموعة يدوياً بالكامل لتجنب أخطاء النسخ ---
-    # نقوم بإنشاء الكائن يدوياً وتحديد الخدمة sentinel-2-l2a مباشرة
-    try:
-        data_collection = DataCollection.SENTINEL_2_L2A
-    except AttributeError:
-        # إذا فشلت الطريقة التلقائية، نستخدم التعريف المباشر
-        data_collection = DataCollection(
-            service_url="https://services.sentinel-hub.com",
-            api_id="sentinel-2-l2a"
-        )
-
+    # --- الحل النهائي: تمرير اسم المجموعة كنص مباشرة (String ID) ---
+    # هذه الطريقة تتجاوز مشاكل الـ Attribute و الـ Metaclass
     request = SentinelHubRequest(
         evalscript=evalscript,
         input_data=[
-            SentinelHubRequest.input_data(
-                data_collection=data_collection,
-                time_interval=(start_date.isoformat(), today.isoformat()),
-                maxcc=20.0,
-                mosaicking_order="leastCC"
-            )
+            {
+                "dataFilter": {
+                    "timeRange": {
+                        "from": f"{start_date.isoformat()}T00:00:00Z",
+                        "to": f"{today.isoformat()}T23:59:59Z"
+                    },
+                    "maxCloudCoverage": 20
+                },
+                "type": "sentinel-2-l2a" # نحدد النوع هنا مباشرة كنص
+            }
         ],
         responses=[
             SentinelHubRequest.output_response('default', MimeType.TIFF)
@@ -106,21 +99,24 @@ with col2:
         if st.button("تحليل NDVI الآن"):
             with st.spinner('جاري التحليل...'):
                 try:
+                    # الحصول على الإحداثيات
                     last_draw = output["all_drawings"][-1]
+                    # تأكد من أخذ الإحداثيات الصحيحة للمضلع
                     coords = last_draw['geometry']['coordinates'][0]
                     
                     img = get_sentinel_image(coords)
                     
+                    # عرض الصورة
                     fig, ax = plt.subplots()
                     im = ax.imshow(img, cmap='RdYlGn', vmin=0, vmax=0.8)
-                    plt.colorbar(im, label='مؤشر NDVI')
+                    plt.colorbar(im, label='NDVI Index')
                     ax.axis('off')
                     st.pyplot(fig)
                     
-                    valid_pixels = img[img > 0]
-                    if len(valid_pixels) > 0:
-                        avg = np.mean(valid_pixels)
-                        st.metric("متوسط NDVI", f"{avg:.2f}")
+                    avg = np.mean(img[img > 0])
+                    st.metric("متوسط NDVI", f"{avg:.2f}")
                     
                 except Exception as e:
-                    st.error(f"حدث خطأ أثناء المعالجة: {e}")
+                    st.error(f"حدث خطأ: {e}")
+    else:
+        st.write("✏️ في انتظار رسم حدود المزرعة...")
