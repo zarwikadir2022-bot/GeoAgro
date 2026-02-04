@@ -5,8 +5,9 @@ from folium.plugins import Draw
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, timedelta
+import sentinelhub
 
-# استدعاء المكتبة بشكلها القياسي فقط
+# استدعاء المكتبة
 from sentinelhub import (
     SHConfig,
     SentinelHubRequest,
@@ -20,6 +21,10 @@ from sentinelhub import (
 st.set_page_config(page_title="AgriSat", page_icon="🌱", layout="wide")
 st.title("🛰️ AgriSat: مراقبة صحة النبات")
 
+# --- فحص النسخة (للتأكد من أن التحديث نجح) ---
+# سيعرض هذا السطر نسخة المكتبة في التطبيق
+st.sidebar.info(f"Sentinelhub Version: {sentinelhub.__version__}")
+
 # --- 2. المفاتيح ---
 if "SH_CLIENT_ID" not in st.secrets:
     st.error("يرجى وضع المفاتيح في Secrets")
@@ -29,7 +34,7 @@ config = SHConfig()
 config.sh_client_id = st.secrets["SH_CLIENT_ID"]
 config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"]
 
-# --- 3. دالة الجلب (النسخة المستقرة) ---
+# --- 3. دالة الجلب ---
 def get_sentinel_image(coords_list):
     # تحويل الإحداثيات
     lons = [c[0] for c in coords_list]
@@ -37,7 +42,7 @@ def get_sentinel_image(coords_list):
     bbox_coords = [min(lons), min(lats), max(lons), max(lats)]
     roi_bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
 
-    # Evalscript بسيط ومضمون
+    # Evalscript لحساب NDVI
     evalscript = """
     //VERSION=3
     function setup() {
@@ -56,13 +61,9 @@ def get_sentinel_image(coords_list):
     today = date.today()
     start_date = today - timedelta(days=30)
 
-    # استخدام المجموعة القياسية التي تعمل مع كل الإصدارات
-    # ملاحظة: هذا يتجنب خطأ Attribute Error تماماً
-    try:
-        data_collection = DataCollection.SENTINEL_2
-    except:
-        # احتياط في حال كان الإصدار مختلفاً جداً
-        data_collection = DataCollection.define_from("SENTINEL_2")
+    # --- استخدام المجموعة الصحيحة للزراعة ---
+    # الآن بعد تحديث requirements، هذا السطر سيعمل 100%
+    data_collection = DataCollection.SENTINEL_2_L2A
 
     request = SentinelHubRequest(
         evalscript=evalscript,
@@ -100,7 +101,7 @@ with col2:
     st.subheader("التحليل")
     if output["all_drawings"]:
         if st.button("تحليل NDVI"):
-            with st.spinner('جاري الاتصال...'):
+            with st.spinner('جاري الاتصال بالقمر الصناعي...'):
                 try:
                     coords = output["all_drawings"][-1]['geometry']['coordinates'][0]
                     img = get_sentinel_image(coords)
@@ -114,7 +115,11 @@ with col2:
                     avg = np.mean(img[img > 0])
                     st.metric("متوسط الصحة", f"{avg:.2f}")
                     
+                    if avg > 0.4: st.success("ممتاز 🟢")
+                    elif avg > 0.2: st.warning("متوسط 🟡")
+                    else: st.error("ضعيف 🔴")
+
                 except Exception as e:
                     st.error(f"حدث خطأ: {e}")
     else:
-        st.info("ارسم مضلعاً على الخريطة للبدء")
+        st.info("ارسم حدود الأرض أولاً ✏️")
