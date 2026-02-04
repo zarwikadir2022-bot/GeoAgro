@@ -5,118 +5,126 @@ from folium.plugins import Draw
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, timedelta
+from sentinelhub import SHConfig, SentinelHubRequest, MimeType, CRS, BBox
 
-from sentinelhub import (
-    SHConfig,
-    SentinelHubRequest,
-    MimeType,
-    CRS,
-    BBox
-)
+# --- 1. Page Configuration & Custom CSS (Windows Modern Style) ---
+st.set_page_config(page_title="AgriSight Pro", page_icon="🛰️", layout="wide")
 
-# --- 1. إعدادات الصفحة ---
-st.set_page_config(page_title="AgriSat", page_icon="🌱", layout="wide")
-st.title("🛰️ AgriSat: مراقبة صحة النبات")
+st.markdown("""
+    <style>
+    .main { background-color: #0e1117; }
+    .stMetric { background-color: #1e2130; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3em; background-color: #0078d4; color: white; border: none; }
+    .stButton>button:hover { background-color: #005a9e; border: none; }
+    .css-1r6slb0 { border-radius: 15px; border: 1px solid #30363d; padding: 20px; }
+    h1, h2, h3 { color: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- 2. المفاتيح ---
-if "SH_CLIENT_ID" not in st.secrets:
-    st.error("⚠️ يرجى إضافة المفاتيح في Secrets")
-    st.stop()
+# --- 2. Authentication Helper ---
+def get_config():
+    try:
+        config = SHConfig()
+        config.sh_client_id = st.secrets["SH_CLIENT_ID"].strip()
+        config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"].strip()
+        return config
+    except:
+        st.error("🔑 API Keys missing in Secrets!")
+        st.stop()
 
-config = SHConfig()
-config.sh_client_id = st.secrets["SH_CLIENT_ID"]
-config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"]
+# --- 3. Satellite Data Engine ---
+def fetch_ndvi(coords_list):
+    config = get_config()
+    lons, lats = [c[0] for c in coords_list], [c[1] for c in coords_list]
+    roi_bbox = BBox(bbox=[min(lons), min(lats), max(lons), max(lats)], crs=CRS.WGS84)
 
-# --- 3. دالة جلب البيانات (الطريقة المباشرة والآمنة) ---
-def get_sentinel_image(coords_list):
-    # تحويل الإحداثيات إلى BBox
-    lons = [c[0] for c in coords_list]
-    lats = [c[1] for c in coords_list]
-    bbox_coords = [min(lons), min(lats), max(lons), max(lats)]
-    roi_bbox = BBox(bbox=bbox_coords, crs=CRS.WGS84)
-
-    # Evalscript لحساب NDVI
     evalscript = """
     //VERSION=3
     function setup() {
-        return {
-            input: ["B04", "B08", "dataMask"],
-            output: { bands: 1 }
-        };
+        return { input: ["B04", "B08", "dataMask"], output: { bands: 1 } };
     }
     function evaluatePixel(sample) {
         let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
-        if (sample.dataMask == 0) return [0];
-        return [ndvi];
+        return [sample.dataMask == 1 ? ndvi : 0];
     }
     """
-
-    today = date.today()
-    start_date = today - timedelta(days=30)
-
-    # --- الحل النهائي: تمرير اسم المجموعة كنص مباشرة (String ID) ---
-    # هذه الطريقة تتجاوز مشاكل الـ Attribute و الـ Metaclass
+    
     request = SentinelHubRequest(
         evalscript=evalscript,
-        input_data=[
-            {
-                "dataFilter": {
-                    "timeRange": {
-                        "from": f"{start_date.isoformat()}T00:00:00Z",
-                        "to": f"{today.isoformat()}T23:59:59Z"
-                    },
-                    "maxCloudCoverage": 20
-                },
-                "type": "sentinel-2-l2a" # نحدد النوع هنا مباشرة كنص
-            }
-        ],
-        responses=[
-            SentinelHubRequest.output_response('default', MimeType.TIFF)
-        ],
-        bbox=roi_bbox,
-        size=(512, 512),
-        config=config
+        input_data=[{
+            "dataFilter": {
+                "timeRange": {"from": (date.today()-timedelta(days=30)).isoformat()+"T00:00:00Z", 
+                             "to": date.today().isoformat()+"T23:59:59Z"},
+                "maxCloudCoverage": 15
+            },
+            "type": "sentinel-2-l2a"
+        }],
+        responses=[SentinelHubRequest.output_response('default', MimeType.TIFF)],
+        bbox=roi_bbox, size=(512, 512), config=config
     )
+    # Correcting potential scaling issues directly
+    raw_data = request.get_data()[0]
+    return raw_data / 100 if np.max(raw_data) > 1 else raw_data
 
-    return request.get_data()[0]
+# --- 4. Main Interface ---
+with st.sidebar:
+    st.image("https://img.icons8.com/fluency/96/satellite-sending-signal.png")
+    st.title("AgriSight Pro")
+    st.markdown("---")
+    st.info("Version 2.0 (Feb 2026)")
+    st.write("Professional Satellite Monitoring for Precision Agriculture.")
 
-# --- 4. الواجهة ---
-col1, col2 = st.columns([2, 1])
+# Layout: 2 Columns
+col_map, col_dash = st.columns([1.5, 1])
 
-with col1:
-    st.info("قم برسم مضلع حول الأرض على الخريطة:")
-    m = folium.Map(location=[34.0, 9.0], zoom_start=7)
-    draw = Draw(
-        export=False,
-        draw_options={"polyline": False, "circle": False, "marker": False, "polygon": True, "rectangle": True}
-    )
-    draw.add_to(m)
-    output = st_folium(m, width=None, height=500)
+with col_map:
+    st.subheader("📍 Field Mapping")
+    m = folium.Map(location=[36.7, 10.2], zoom_start=11, tiles="CartoDB dark_matter")
+    Draw(export=False, position='topleft', 
+         draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
+    
+    output = st_folium(m, width="100%", height=550)
 
-with col2:
-    st.subheader("تحليل الصحة النباتية")
+with col_dash:
+    st.subheader("📊 Analysis Dashboard")
+    
     if output["all_drawings"]:
-        if st.button("تحليل NDVI الآن"):
-            with st.spinner('جاري التحليل...'):
+        st.success("Target area selected!")
+        analyze_btn = st.button("RUN SATELLITE ANALYSIS")
+        
+        if analyze_btn:
+            with st.spinner('Accessing Sentinel-2 Satellite...'):
                 try:
-                    # الحصول على الإحداثيات
-                    last_draw = output["all_drawings"][-1]
-                    # تأكد من أخذ الإحداثيات الصحيحة للمضلع
-                    coords = last_draw['geometry']['coordinates'][0]
+                    coords = output["all_drawings"][-1]['geometry']['coordinates'][0]
+                    ndvi_img = fetch_ndvi(coords)
                     
-                    img = get_sentinel_image(coords)
-                    
-                    # عرض الصورة
-                    fig, ax = plt.subplots()
-                    im = ax.imshow(img, cmap='RdYlGn', vmin=0, vmax=0.8)
-                    plt.colorbar(im, label='NDVI Index')
+                    # Visualization
+                    fig, ax = plt.subplots(figsize=(5, 5), facecolor='#0e1117')
+                    im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
                     ax.axis('off')
+                    fig.patch.set_alpha(0) # Transparent background
                     st.pyplot(fig)
                     
-                    avg = np.mean(img[img > 0])
-                    st.metric("متوسط NDVI", f"{avg:.2f}")
+                    # Metrics
+                    avg_v = np.mean(ndvi_img[ndvi_img > 0])
+                    c1, c2 = st.columns(2)
+                    c1.metric("Avg NDVI", f"{avg_v:.2f}")
                     
+                    status = "Healthy" if avg_v > 0.5 else "Stressed" if avg_v > 0.2 else "Bare Soil"
+                    c2.metric("Health Status", status)
+                    
+                    st.progress(min(float(avg_v), 1.0))
+                    
+                    st.markdown("### 💡 AI Recommendation")
+                    if avg_v > 0.5:
+                        st.write("✅ Crop is thriving. Continue current irrigation schedule.")
+                    else:
+                        st.write("⚠️ Low vigor detected. Check for water stress or nutrient deficiency in the red zones.")
+
                 except Exception as e:
-                    st.error(f"حدث خطأ: {e}")
+                    st.error(f"Execution Error: {str(e)}")
     else:
-        st.write("✏️ في انتظار رسم حدود المزرعة...")
+        st.warning("Please use the drawing tools to select a farm on the map.")
+
+st.markdown("---")
+st.caption("© 2026 AgriSight Technologies Tunisia | Precision Agriculture Portal")
