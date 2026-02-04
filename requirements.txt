@@ -1,0 +1,7 @@
+streamlit
+sentinelhub
+folium
+streamlit-folium
+matplotlib
+numpy
+shapely
