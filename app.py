@@ -38,12 +38,9 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* إخفاء القوائم */
-    [data-testid="stSidebar"] { display: none !important; }
-    [data-testid="collapsedControl"] { display: none !important; }
-    #MainMenu { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-    header { visibility: hidden !important; }
+    [data-testid="stSidebar"], [data-testid="collapsedControl"], #MainMenu, footer, header { 
+        display: none !important; 
+    }
     
     .block-container {
         padding-top: 1rem !important;
@@ -53,15 +50,11 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* الخريطة */
-    iframe { width: 100% !important; min-height: 300px !important; border-radius: 12px; }
+    iframe { width: 100% !important; min-height: 350px !important; border-radius: 12px; }
     
     .stButton button { width: 100%; border-radius: 8px; font-weight: bold; font-family: 'Tajawal'; }
     
-    .stTabs [data-baseweb="tab-list"] { 
-        justify-content: center;
-        flex-wrap: wrap;
-    }
+    .stTabs [data-baseweb="tab-list"] { justify-content: center; flex-wrap: wrap; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -122,7 +115,7 @@ def fetch_satellite_data(coords_list):
 # --- الهيدر ---
 st.markdown("""
 <div style="background: #1e2130; padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-start; gap: 15px; border: 1px solid #333; direction: rtl;">
-    <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="50" style="background: white; border-radius: 50%; padding: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.3);">
+    <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="50" style="background: white; border-radius: 50%; padding: 4px;">
     <div style="text-align: right;">
         <h2 style="margin: 0; color: white; font-size: 1.4rem; font-weight: 700; white-space: nowrap; font-family: 'Tajawal', sans-serif;">AgriSight Pro</h2>
         <div style="display: flex; align-items: center; gap: 5px;">
@@ -133,23 +126,20 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- تقسيم الشاشة (نصفين) ---
-# العمود الأيمن (c_map) للخريطة، والأيسر (c_res) للنتائج
+# --- الأعمدة ---
 c_map, c_res = st.columns([1, 1])
 
-# 1. العمود الأيمن: الخريطة
+# 1. الخريطة
 with c_map:
-    st.markdown("##### 📍 حدد الأرض:")
+    st.markdown("##### 📍 الأرض:")
     m = folium.Map(location=[36.8, 10.1], zoom_start=10)
     folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
     folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
     folium.LayerControl().add_to(m)
     Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
-    
-    # الخريطة تأخذ عرض العمود فقط (50% من الشاشة)
     map_output = st_folium(m, width="100%", height=350)
 
-# 2. العمود الأيسر: النتائج والتحكم
+# 2. النتائج
 with c_res:
     if map_output and map_output.get("all_drawings"):
         drawings = map_output["all_drawings"]
@@ -157,7 +147,6 @@ with c_res:
         centroid_lat = np.mean([p[1] for p in polygon])
         centroid_lon = np.mean([p[0] for p in polygon])
         
-        # الطقس
         weather = get_agri_weather(centroid_lat, centroid_lon)
         if weather:
             curr = weather['current']
@@ -166,10 +155,10 @@ with c_res:
             can_spray = wind < 15 and curr['rain'] == 0
             spray_bg = "#28a745" if can_spray else "#dc3545"
 
-            st.markdown("##### 🌦️ حالة الطقس:")
+            st.markdown("##### 🌦️ الطقس:")
             sc1, sc2, sc3 = st.columns(3)
-            sc1.metric("🌡️ الحرارة", f"{temp}°")
-            sc2.metric("💨 الرياح", f"{wind}")
+            sc1.metric("🌡️", f"{temp}°")
+            sc2.metric("💨", f"{wind}")
             sc3.markdown(f'<div style="background:{spray_bg}; border-radius:8px; text-align:center; color:white; padding:15px; margin-top:0px; font-size:0.8rem;"><b>رش المبيدات</b></div>', unsafe_allow_html=True)
 
         st.write("")
@@ -181,21 +170,23 @@ with c_res:
                     ndwi_img = raw_data[:, :, 1]
                     mask = ndvi_img > -0.5
                     
+                    # حساب المتوسطات للنصيحة
+                    avg_ndvi = np.mean(ndvi_img[mask])
+                    avg_ndwi = np.mean(ndwi_img[mask])
+
                     tab1, tab2, tab3 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد"])
                     
                     with tab1:
-                        avg_ndvi = np.mean(ndvi_img[mask])
                         st.metric("الغطاء النباتي (NDVI)", f"{avg_ndvi:.2f}")
                         fig, ax = plt.subplots(figsize=(5,3))
                         im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
                         plt.colorbar(im)
                         ax.axis('off')
-                        fig.patch.set_facecolor('#0e1117') # لون الخلفية مطابق للتطبيق
+                        fig.patch.set_facecolor('#0e1117')
                         ax.set_title(fix_text("الكثافة"), color='white')
                         st.pyplot(fig)
 
                     with tab2:
-                        avg_ndwi = np.mean(ndwi_img[mask])
                         st.metric("الرطوبة (NDWI)", f"{avg_ndwi:.2f}")
                         fig2, ax2 = plt.subplots(figsize=(5,3))
                         im2 = ax2.imshow(ndwi_img, cmap='Blues', vmin=-0.2, vmax=0.6)
@@ -219,7 +210,38 @@ with c_res:
                             fig3.patch.set_facecolor('#0e1117')
                             st.pyplot(fig3)
 
+                    # --- 🤖 وحدة المستشار الذكي (AI Advice) ---
+                    st.markdown("---")
+                    st.markdown("#### 🤖 المستشار الذكي:")
+                    
+                    # منطق النصيحة
+                    advice_text = ""
+                    advice_color = ""
+                    
+                    if avg_ndwi < -0.1:
+                        advice_text = "⚠️ تحذير: الأرض تعاني من الجفاف الشديد. يجب الري فوراً."
+                        advice_color = "#ff4d4d" # أحمر
+                    elif avg_ndvi < 0.2:
+                        advice_text = "⚠️ تنبيه: ضعف في الغطاء النباتي. افحص مشاكل التربة أو الآفات."
+                        advice_color = "#ffcc00" # أصفر
+                    else:
+                        advice_text = "✅ الحالة ممتازة: استمر في برنامج الري والتسميد الحالي."
+                        advice_color = "#28a745" # أخضر
+                        
+                    st.markdown(f"""
+                    <div style="
+                        background-color: {advice_color}20; 
+                        border: 1px solid {advice_color}; 
+                        border-radius: 10px; 
+                        padding: 15px; 
+                        color: white;
+                    ">
+                        <strong style="color:{advice_color}; font-size:1.1rem;">التوصية:</strong><br>
+                        {advice_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+
                 except Exception as e:
                     st.error(f"خطأ: {str(e)}")
     else:
-        st.info("👈 ابدأ برسم الأرض على الخريطة يميناً.")
+        st.info("👈 ابدأ برسم الأرض.")
