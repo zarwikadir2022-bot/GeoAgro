@@ -25,7 +25,7 @@ def fix_text(text):
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="AgriSight Pro", page_icon="🌾", layout="wide")
 
-# --- CSS: التصميم وإصلاح مشاكل الموبايل ---
+# --- CSS: إصلاح مشاكل الموبايل والكتابة العمودية ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -38,37 +38,37 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* إصلاح مشكلة الكتابة العمودية في الهاتف */
-    h1, h2, h3 {
-        white-space: nowrap !important; /* يمنع تكسر النص */
-        font-size: 1.8rem !important;
-        color: white;
+    /* منع تكسر العناوين نهائياً */
+    h1, h2, h3, .stTitle {
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
-    /* تحسين هوامش الموبايل */
+    /* تنسيق خاص للشريط الجانبي في الموبايل */
+    [data-testid="stSidebar"] {
+        width: 300px !important;
+    }
+    
+    /* تحسين عرض الخريطة لتملأ الشاشة */
+    iframe { width: 100% !important; min-height: 400px; }
+    
+    /* تحسين الهوامش لتوسيع مساحة العرض */
     .block-container {
-        padding-top: 1rem !important;
+        padding-top: 1.5rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
-    }
-    
-    /* جعل الخريطة متجاوبة */
-    iframe { width: 100% !important; }
-    
-    /* تنسيق التبويبات */
-    .stTabs [data-baseweb="tab-list"] { 
-        justify-content: flex-end;
-        flex-wrap: wrap; /* يسمح للتبويبات بالنزول لسطر جديد في الموبايل */
     }
     
     /* تنسيق صندوق الطقس */
     .weather-box {
         background: linear-gradient(135deg, #0078d4 0%, #00b4d8 100%);
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 10px;
         color: white;
         text-align: center;
         margin-bottom: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -81,7 +81,7 @@ def get_sh_config():
         config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"].strip()
         return config
     except:
-        st.error("🔑 مفاتيح SentinelHub مفقودة! تأكد من ملف secrets.toml")
+        st.error("🔑 مفاتيح SentinelHub مفقودة!")
         st.stop()
 
 def get_agri_weather(lat, lon):
@@ -108,12 +108,10 @@ def fetch_satellite_data(coords_list):
         let ndvi = (sample.B08 - sample.B04) / (sample.B08 + sample.B04);
         let ndwi = (sample.B08 - sample.B11) / (sample.B08 + sample.B11);
         let ndre = (sample.B08 - sample.B05) / (sample.B08 + sample.B05);
-        
         if (sample.dataMask == 1) { return [ndvi, ndwi, ndre]; } 
         else { return [-1, -1, -1]; }
     }
     """
-    
     request = SentinelHubRequest(
         evalscript=evalscript,
         input_data=[{
@@ -129,13 +127,18 @@ def fetch_satellite_data(coords_list):
     )
     return request.get_data()[0]
 
-# --- الواجهة الرئيسية ---
+# --- الشريط الجانبي (تم التعديل لإصلاح الكتابة) ---
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/drone-with-camera.png", width=60)
-    st.title("AgriSight Pro")
-    st.caption("المنظومة الذكية للفلاحة")
+    
+    # استخدمنا HTML مباشر للتحكم في العنوان ومنع تكسره
+    st.markdown("""
+        <h1 style='font-size: 1.5rem; white-space: nowrap; margin-bottom: 0;'>AgriSight Pro</h1>
+        <p style='color: gray; font-size: 0.9rem;'>منظومة الفلاحة الذكية</p>
+    """, unsafe_allow_html=True)
+    
     st.markdown("---")
-    st.info("👈 ارسم حدود الأرض على الخريطة أولاً")
+    st.info("👈 ارسم حدود الأرض على الخريطة")
 
 # تقسيم الأعمدة
 col_map, col_dash = st.columns([1.5, 1.2])
@@ -158,8 +161,7 @@ with col_map:
 
 with col_dash:
     if map_output and map_output.get("all_drawings"):
-        drawings = map_output["all_drawings"]
-        polygon = drawings[-1]['geometry']['coordinates'][0]
+        polygon = map_output["all_drawings"][-1]['geometry']['coordinates'][0]
         centroid_lat = np.mean([p[1] for p in polygon])
         centroid_lon = np.mean([p[0] for p in polygon])
         
@@ -181,20 +183,20 @@ with col_dash:
             c4.markdown(f'<div style="background:{spray_bg};padding:5px;border-radius:5px;text-align:center;color:white;font-size:0.8rem;">{spray_msg}</div>', unsafe_allow_html=True)
 
         if st.button("🚀 تحليل الأرض الآن", type="primary"):
-            with st.spinner('جاري تحليل الصور الفضائية...'):
+            with st.spinner('جاري التحليل الفضائي...'):
                 try:
                     raw_data = fetch_satellite_data(polygon)
                     ndvi_img = raw_data[:, :, 0]
                     ndwi_img = raw_data[:, :, 1]
                     mask = ndvi_img > -0.5
                     
-                    # التبويبات
+                    # التبويبات (4 تبويبات)
                     tab1, tab2, tab3, tab4 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد", "📄 تقرير"])
                     
-                    # 1. الصحة (NDVI)
+                    # 1. النمو (NDVI)
                     with tab1:
                         avg_ndvi = np.mean(ndvi_img[mask])
-                        st.metric("مؤشر الغطاء (NDVI)", f"{avg_ndvi:.2f}")
+                        st.metric("مؤشر الغطاء", f"{avg_ndvi:.2f}")
                         
                         fig, ax = plt.subplots(figsize=(6,4))
                         im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
@@ -204,7 +206,6 @@ with col_dash:
                         ax.set_title(fix_text("خريطة الكثافة النباتية"), color='white')
                         st.pyplot(fig)
                         
-                        # رسم بياني تاريخي (محاكاة)
                         st.markdown("##### 📈 تطور النمو")
                         dates = pd.date_range(end=date.today(), periods=6, freq='M')
                         values = [avg_ndvi * (0.7 + 0.05*i) for i in range(6)]
@@ -214,8 +215,7 @@ with col_dash:
                     # 2. المياه (NDWI)
                     with tab2:
                         avg_ndwi = np.mean(ndwi_img[mask])
-                        status = "جيد" if avg_ndwi > 0.3 else "عطش"
-                        st.metric("مؤشر الرطوبة", f"{avg_ndwi:.2f}", delta=status)
+                        st.metric("مؤشر الرطوبة", f"{avg_ndwi:.2f}")
                         
                         fig2, ax2 = plt.subplots(figsize=(6,4))
                         im2 = ax2.imshow(ndwi_img, cmap='Blues', vmin=-0.2, vmax=0.6)
@@ -242,11 +242,9 @@ with col_dash:
                             fig3.patch.set_facecolor('#1e2130')
                             
                             import matplotlib.patches as mpatches
-                            patches = [
-                                mpatches.Patch(color='#28a745', label=fix_text('قوي')),
-                                mpatches.Patch(color='#ffcc00', label=fix_text('متوسط')),
-                                mpatches.Patch(color='#ff4d4d', label=fix_text('ضعيف'))
-                            ]
+                            patches = [mpatches.Patch(color='#28a745', label=fix_text('قوي')),
+                                      mpatches.Patch(color='#ffcc00', label=fix_text('متوسط')),
+                                      mpatches.Patch(color='#ff4d4d', label=fix_text('ضعيف'))]
                             ax3.legend(handles=patches, loc='lower right', facecolor='white')
                             ax3.set_title(fix_text("خريطة توجيه التسميد"), color='white')
                             st.pyplot(fig3)
@@ -257,15 +255,14 @@ with col_dash:
                         report_html = f"""
                         <div dir="rtl" style="background:white; color:black; padding:15px; border-radius:10px; text-align:right;">
                             <h3 style="color:#0078d4; margin:0;">AgriSight - تقرير</h3>
-                            <p style="font-size:0.9rem; color:gray;">{date.today()}</p>
+                            <p style="color:gray;">{date.today()}</p>
                             <hr>
                             <ul>
                                 <li>الغطاء النباتي: <b>{avg_ndvi:.2f}</b></li>
-                                <li>الحالة المائية: <b>{avg_ndwi:.2f}</b></li>
-                                <li>الحرارة: <b>{temp}°C</b></li>
+                                <li>الرطوبة: <b>{avg_ndwi:.2f}</b></li>
                             </ul>
-                            <div style="background:#f0f2f6; padding:10px; border-radius:5px;">
-                                <b>التوصية:</b><br>ينصح بالري التكميلي في المناطق الصفراء والحمراء.
+                            <div style="background:#f0f2f6; padding:10px;">
+                                <b>التوصية:</b> متابعة الري في المناطق الحمراء.
                             </div>
                         </div>
                         """
