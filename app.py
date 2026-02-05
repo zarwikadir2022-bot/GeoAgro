@@ -15,13 +15,17 @@ from bidi.algorithm import get_display
 # --- دالة تصحيح النص العربي للرسوم البيانية ---
 def fix_text(text):
     if not text: return ""
-    reshaped_text = arabic_reshaper.reshape(text)
-    bidi_text = get_display(reshaped_text)
-    return bidi_text
+    try:
+        reshaped_text = arabic_reshaper.reshape(text)
+        bidi_text = get_display(reshaped_text)
+        return bidi_text
+    except:
+        return text
 
 # --- إعدادات الصفحة ---
-st.set_page_config(page_title="AgriSight Pro | الشاملة", page_icon="🌾", layout="wide")
+st.set_page_config(page_title="AgriSight Pro", page_icon="🌾", layout="wide")
 
+# --- CSS: التصميم وإصلاح مشاكل الموبايل ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -33,17 +37,43 @@ st.markdown("""
     }
     
     .main { background-color: #0e1117; }
-    h1, h2, h3, h4 { color: white; text-align: right; font-family: 'Tajawal', sans-serif; }
     
-    /* تنسيق التبويبات لتظهر من اليمين */
+    /* إصلاح مشكلة الكتابة العمودية في الهاتف */
+    h1, h2, h3 {
+        white-space: nowrap !important; /* يمنع تكسر النص */
+        font-size: 1.8rem !important;
+        color: white;
+    }
+    
+    /* تحسين هوامش الموبايل */
+    .block-container {
+        padding-top: 1rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    /* جعل الخريطة متجاوبة */
+    iframe { width: 100% !important; }
+    
+    /* تنسيق التبويبات */
     .stTabs [data-baseweb="tab-list"] { 
         justify-content: flex-end;
-        gap: 10px;
+        flex-wrap: wrap; /* يسمح للتبويبات بالنزول لسطر جديد في الموبايل */
+    }
+    
+    /* تنسيق صندوق الطقس */
+    .weather-box {
+        background: linear-gradient(135deg, #0078d4 0%, #00b4d8 100%);
+        border-radius: 10px;
+        padding: 10px;
+        color: white;
+        text-align: center;
+        margin-bottom: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- دوال الاتصال ---
+# --- دوال الاتصال (APIs) ---
 def get_sh_config():
     try:
         config = SHConfig()
@@ -51,7 +81,7 @@ def get_sh_config():
         config.sh_client_secret = st.secrets["SH_CLIENT_SECRET"].strip()
         return config
     except:
-        st.error("🔑 مفاتيح SentinelHub مفقودة في secrets.toml")
+        st.error("🔑 مفاتيح SentinelHub مفقودة! تأكد من ملف secrets.toml")
         st.stop()
 
 def get_agri_weather(lat, lon):
@@ -66,7 +96,6 @@ def fetch_satellite_data(coords_list):
     lons, lats = [c[0] for c in coords_list], [c[1] for c in coords_list]
     roi_bbox = BBox(bbox=[min(lons), min(lats), max(lons), max(lats)], crs=CRS.WGS84)
 
-    # جلب 3 مؤشرات: NDVI, NDWI, NDRE
     evalscript = """
     //VERSION=3
     function setup() {
@@ -104,24 +133,33 @@ def fetch_satellite_data(coords_list):
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/drone-with-camera.png", width=60)
     st.title("AgriSight Pro")
-    st.caption("النسخة الكاملة - عربي")
+    st.caption("المنظومة الذكية للفلاحة")
     st.markdown("---")
-    st.info("قم برسم الأرض على الخريطة لبدء التحليل الشامل.")
+    st.info("👈 ارسم حدود الأرض على الخريطة أولاً")
 
+# تقسيم الأعمدة
 col_map, col_dash = st.columns([1.5, 1.2])
 
 with col_map:
     st.subheader("📍 الخريطة")
     m = folium.Map(location=[36.8, 10.1], zoom_start=10)
-    folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
+    
+    folium.TileLayer(
+        tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        attr='Esri', name='قمر صناعي'
+    ).add_to(m)
     folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
     folium.LayerControl().add_to(m)
-    Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
-    map_output = st_folium(m, width="100%", height=650)
+    
+    Draw(export=False, position='topleft', 
+         draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
+    
+    map_output = st_folium(m, width="100%", height=500)
 
 with col_dash:
-    if map_output["all_drawings"]:
-        polygon = map_output["all_drawings"][-1]['geometry']['coordinates'][0]
+    if map_output and map_output.get("all_drawings"):
+        drawings = map_output["all_drawings"]
+        polygon = drawings[-1]['geometry']['coordinates'][0]
         centroid_lat = np.mean([p[1] for p in polygon])
         centroid_lon = np.mean([p[0] for p in polygon])
         
@@ -140,21 +178,20 @@ with col_dash:
             c1.metric("الحرارة", f"{temp}°C")
             c2.metric("الرياح", f"{wind} km/h")
             c3.metric("الرطوبة", f"{curr['relative_humidity_2m']}%")
-            c4.markdown(f'<div style="background:{spray_bg};padding:5px;border-radius:5px;text-align:center;color:white;"><small>المداواة</small><br><b>{spray_msg}</b></div>', unsafe_allow_html=True)
+            c4.markdown(f'<div style="background:{spray_bg};padding:5px;border-radius:5px;text-align:center;color:white;font-size:0.8rem;">{spray_msg}</div>', unsafe_allow_html=True)
 
         if st.button("🚀 تحليل الأرض الآن", type="primary"):
-            with st.spinner('جاري استدعاء البيانات الفضائية...'):
+            with st.spinner('جاري تحليل الصور الفضائية...'):
                 try:
                     raw_data = fetch_satellite_data(polygon)
                     ndvi_img = raw_data[:, :, 0]
                     ndwi_img = raw_data[:, :, 1]
-                    ndre_img = raw_data[:, :, 2]
                     mask = ndvi_img > -0.5
                     
-                    # --- تمت استعادة التبويبات الأربعة ---
-                    tab1, tab2, tab3, tab4 = st.tabs(["🌱 الصحة والنمو", "💧 المياه (NDWI)", "🚜 التسميد", "📄 تقرير فني"])
+                    # التبويبات
+                    tab1, tab2, tab3, tab4 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد", "📄 تقرير"])
                     
-                    # 1. الصحة + الرسم البياني التاريخي (المعاد)
+                    # 1. الصحة (NDVI)
                     with tab1:
                         avg_ndvi = np.mean(ndvi_img[mask])
                         st.metric("مؤشر الغطاء (NDVI)", f"{avg_ndvi:.2f}")
@@ -167,18 +204,17 @@ with col_dash:
                         ax.set_title(fix_text("خريطة الكثافة النباتية"), color='white')
                         st.pyplot(fig)
                         
-                        # --- الميزة المستعادة: الرسم البياني التاريخي ---
-                        st.markdown("##### 📈 تطور النمو (محاكاة موسمية)")
+                        # رسم بياني تاريخي (محاكاة)
+                        st.markdown("##### 📈 تطور النمو")
                         dates = pd.date_range(end=date.today(), periods=6, freq='M')
-                        # محاكاة بيانات بناء على القيمة الحالية للعرض
                         values = [avg_ndvi * (0.7 + 0.05*i) for i in range(6)]
-                        chart_df = pd.DataFrame({"التاريخ": dates, "مؤشر النمو": values})
+                        chart_df = pd.DataFrame({"التاريخ": dates, "النمو": values})
                         st.line_chart(chart_df.set_index("التاريخ"), color="#28a745")
 
-                    # 2. المياه + الكلوروفيل (المعاد دمجه)
+                    # 2. المياه (NDWI)
                     with tab2:
                         avg_ndwi = np.mean(ndwi_img[mask])
-                        status = "ري جيد" if avg_ndwi > 0.3 else "إجهاد مائي"
+                        status = "جيد" if avg_ndwi > 0.3 else "عطش"
                         st.metric("مؤشر الرطوبة", f"{avg_ndwi:.2f}", delta=status)
                         
                         fig2, ax2 = plt.subplots(figsize=(6,4))
@@ -188,58 +224,54 @@ with col_dash:
                         fig2.patch.set_facecolor('#1e2130')
                         ax2.set_title(fix_text("خريطة المحتوى المائي"), color='white')
                         st.pyplot(fig2)
-                        
-                        st.info("ملاحظة: يتم استخدام مؤشر NDRE أيضاً في الخلفية لتحسين دقة المناطق الكثيفة.")
 
                     # 3. التسميد (Zoning)
                     with tab3:
                         valid = ndvi_img[mask]
-                        q1, q2 = np.percentile(valid, [33, 66])
-                        zones = np.zeros_like(ndvi_img)
-                        zones[mask] = 1; zones[ndvi_img > q1] = 2; zones[ndvi_img > q2] = 3; zones[~mask]=0
-                        
-                        cmap = mcolors.ListedColormap(['black', '#ff4d4d', '#ffcc00', '#28a745'])
-                        norm = mcolors.BoundaryNorm([0,1,2,3,4], cmap.N)
-                        
-                        fig3, ax3 = plt.subplots(figsize=(6,4))
-                        im3 = ax3.imshow(zones, cmap=cmap, norm=norm)
-                        ax3.axis('off')
-                        fig3.patch.set_facecolor('#1e2130')
-                        
-                        import matplotlib.patches as mpatches
-                        patches = [
-                            mpatches.Patch(color='#28a745', label=fix_text('نطاق قوي')),
-                            mpatches.Patch(color='#ffcc00', label=fix_text('نطاق متوسط')),
-                            mpatches.Patch(color='#ff4d4d', label=fix_text('نطاق ضعيف'))
-                        ]
-                        ax3.legend(handles=patches, loc='lower right', facecolor='white')
-                        ax3.set_title(fix_text("خريطة توجيه التسميد"), color='white')
-                        st.pyplot(fig3)
+                        if len(valid) > 0:
+                            q1, q2 = np.percentile(valid, [33, 66])
+                            zones = np.zeros_like(ndvi_img)
+                            zones[mask] = 1; zones[ndvi_img > q1] = 2; zones[ndvi_img > q2] = 3; zones[~mask]=0
+                            
+                            cmap = mcolors.ListedColormap(['black', '#ff4d4d', '#ffcc00', '#28a745'])
+                            norm = mcolors.BoundaryNorm([0,1,2,3,4], cmap.N)
+                            
+                            fig3, ax3 = plt.subplots(figsize=(6,4))
+                            im3 = ax3.imshow(zones, cmap=cmap, norm=norm)
+                            ax3.axis('off')
+                            fig3.patch.set_facecolor('#1e2130')
+                            
+                            import matplotlib.patches as mpatches
+                            patches = [
+                                mpatches.Patch(color='#28a745', label=fix_text('قوي')),
+                                mpatches.Patch(color='#ffcc00', label=fix_text('متوسط')),
+                                mpatches.Patch(color='#ff4d4d', label=fix_text('ضعيف'))
+                            ]
+                            ax3.legend(handles=patches, loc='lower right', facecolor='white')
+                            ax3.set_title(fix_text("خريطة توجيه التسميد"), color='white')
+                            st.pyplot(fig3)
 
-                    # 4. التقرير (الميزة المستعادة)
+                    # 4. التقرير
                     with tab4:
                         st.markdown("### 📋 تقرير المعاينة")
                         report_html = f"""
-                        <div dir="rtl" style="background:white; color:black; padding:20px; border-radius:10px; text-align:right;">
-                            <h3 style="color:#0078d4; margin-top:0;">AgriSight Pro - تقرير فني</h3>
-                            <p><b>التاريخ:</b> {date.today()}</p>
-                            <p><b>الإحداثيات:</b> {centroid_lat:.4f}, {centroid_lon:.4f}</p>
+                        <div dir="rtl" style="background:white; color:black; padding:15px; border-radius:10px; text-align:right;">
+                            <h3 style="color:#0078d4; margin:0;">AgriSight - تقرير</h3>
+                            <p style="font-size:0.9rem; color:gray;">{date.today()}</p>
                             <hr>
-                            <h4>النتائج الرئيسية:</h4>
                             <ul>
-                                <li>معدل الغطاء النباتي (NDVI): <b>{avg_ndvi:.2f}</b></li>
-                                <li>الحالة المائية (NDWI): <b>{avg_ndwi:.2f}</b></li>
-                                <li>حالة الطقس: <b>{temp}°C</b> (الرياح: {wind} km/h)</li>
+                                <li>الغطاء النباتي: <b>{avg_ndvi:.2f}</b></li>
+                                <li>الحالة المائية: <b>{avg_ndwi:.2f}</b></li>
+                                <li>الحرارة: <b>{temp}°C</b></li>
                             </ul>
-                            <div style="background:#f0f2f6; padding:10px; border-radius:5px; margin-top:10px;">
-                                <b>التوصية الآلية:</b><br>
-                                بناءً على تحليل النطاقات، ينصح بزيادة جرعة الآزوت في المنطقة الحمراء بنسبة 20%.
+                            <div style="background:#f0f2f6; padding:10px; border-radius:5px;">
+                                <b>التوصية:</b><br>ينصح بالري التكميلي في المناطق الصفراء والحمراء.
                             </div>
                         </div>
                         """
-                        st.components.v1.html(report_html, height=400, scrolling=True)
+                        st.components.v1.html(report_html, height=350, scrolling=True)
 
                 except Exception as e:
-                    st.error(f"خطأ: {e}")
+                    st.error(f"خطأ: {str(e)}")
     else:
-        st.warning("⚠️ ارسم الأرض أولاً.")
+        st.info("⚠️ الرجاء رسم حدود الأرض على الخريطة.")
