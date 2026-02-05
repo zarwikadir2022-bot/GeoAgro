@@ -1,4 +1,3 @@
-
 import streamlit as st
 import folium
 from streamlit_folium import st_folium
@@ -23,15 +22,15 @@ def fix_text(text):
     except:
         return text
 
-# --- إعدادات الصفحة (وضع عريض) ---
+# --- إعدادات الصفحة ---
+# ملاحظة: initial_sidebar_state="collapsed" هي الخطوة الأولى
 st.set_page_config(page_title="AgriSight Pro", page_icon="🌾", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS: تصميم ملء الشاشة وإخفاء القوائم الزائدة ---
+# --- CSS: الإخفاء الجذري للشريط الجانبي ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
     
-    /* 1. إعدادات اللغة والخط */
     html, body, [class*="css"] {
         direction: rtl;
         text-align: right;
@@ -40,38 +39,41 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* 2. إخفاء الشريط الجانبي والقائمة العلوية لزيادة المساحة */
-    [data-testid="stSidebar"] { display: none; }
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    header { visibility: hidden; }
+    /* --- 1. إعدام الشريط الجانبي تماماً --- */
+    [data-testid="stSidebar"] { display: none !important; visibility: hidden !important; }
+    [data-testid="collapsedControl"] { display: none !important; visibility: hidden !important; }
+    section[data-testid="stSidebar"] { display: none !important; width: 0px !important; }
     
-    /* 3. تقليل الهوامش العلوية لرفع المحتوى لأعلى الشاشة */
+    /* --- 2. إخفاء القوائم العلوية المزعجة --- */
+    #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+    header { visibility: hidden !important; }
+    .stDeployButton { display: none !important; }
+    
+    /* --- 3. إجبار المحتوى على ملء الشاشة --- */
     .block-container {
         padding-top: 1rem !important;
+        padding-bottom: 2rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
-        padding-bottom: 2rem !important;
+        max-width: 100% !important;
+        width: 100% !important;
     }
     
-    /* 4. تنسيق العنوان العلوي */
-    .app-header {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 10px;
-        background: #1e2130;
-        padding: 10px;
-        border-radius: 10px;
-        border: 1px solid #333;
+    /* --- 4. تنسيقات الخريطة والعناوين --- */
+    iframe { width: 100% !important; min-height: 450px; border-radius: 10px; }
+    
+    .stButton button { width: 100%; border-radius: 8px; font-weight: bold; font-family: 'Tajawal'; }
+    
+    /* تنسيق التبويبات */
+    .stTabs [data-baseweb="tab-list"] { 
+        justify-content: center;
+        flex-wrap: wrap;
     }
-    
-    /* 5. تحسين عرض الخريطة */
-    iframe { width: 100% !important; min-height: 400px; border-radius: 10px; }
-    
-    /* 6. تنسيق الأزرار والنتائج */
-    .stButton button { width: 100%; border-radius: 8px; font-weight: bold; }
-    
+    .stTabs [data-baseweb="tab"] {
+        flex-grow: 1; /* يجعل التبويبات تأخذ العرض كامل */
+        text-align: center;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -129,35 +131,40 @@ def fetch_satellite_data(coords_list):
     )
     return request.get_data()[0]
 
-# --- 1. رأس الصفحة (Header) بدلاً من الشريط الجانبي ---
-c_logo, c_title = st.columns([0.2, 0.8])
-
-with c_logo:
-    st.image("https://img.icons8.com/fluency/96/drone-with-camera.png", width=60)
-
-with c_title:
-    # عنوان HTML مخصص يظهر بجانب الشعار
-    st.markdown("""
-    <div style="padding-top: 10px;">
-        <h2 style="margin:0; padding:0; color:white; white-space:nowrap; font-size: 1.5rem;">AgriSight Pro</h2>
-        <p style="margin:0; padding:0; color:#aaa; font-size: 0.8rem;">المنظومة الفلاحية الذكية</p>
+# --- 1. رأس الصفحة (Header) ---
+# تصميم بسيط ونظيف للجوال
+st.markdown("""
+<div style="
+    background: #1e2130; 
+    padding: 15px; 
+    border-radius: 10px; 
+    margin-bottom: 15px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    border: 1px solid #333;">
+    
+    <div style="text-align: right;">
+        <h2 style="margin:0; color:white; font-size: 1.4rem; white-space:nowrap;">AgriSight Pro</h2>
+        <span style="color:#28a745; font-size: 0.8rem;">● متصل بالأقمار الصناعية</span>
     </div>
-    """, unsafe_allow_html=True)
+    
+    <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="50" style="background:white; border-radius:50%; padding:2px;">
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown("---")
-
-# --- 2. الخريطة (تأخذ كامل العرض) ---
-st.markdown("##### 📍 حدد الأرض على الخريطة:")
+# --- 2. الخريطة (الآن تأخذ كامل الشاشة) ---
+# لا نستخدم col_map هنا، نضع الخريطة مباشرة لتأخذ العرض كاملاً
 m = folium.Map(location=[36.8, 10.1], zoom_start=10)
 folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
 folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
 folium.LayerControl().add_to(m)
 Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
 
-# عرض الخريطة بعرض كامل
-map_output = st_folium(m, width="100%", height=400)
+st.caption("📍 ارسم حدود الأرض:")
+map_output = st_folium(m, width="100%", height=400) # استخدام width="100%"
 
-# --- 3. النتائج والتحليل (تظهر تحت الخريطة) ---
+# --- 3. النتائج (تحت الخريطة) ---
 if map_output and map_output.get("all_drawings"):
     drawings = map_output["all_drawings"]
     polygon = drawings[-1]['geometry']['coordinates'][0]
@@ -173,20 +180,20 @@ if map_output and map_output.get("all_drawings"):
         wind = curr['wind_speed_10m']
         temp = curr['temperature_2m']
         can_spray = wind < 15 and curr['rain'] == 0
-        spray_msg = "مناسب للرش" if can_spray else "رياح قوية"
+        spray_msg = "مناسب" if can_spray else "غير مناسب"
         spray_bg = "#28a745" if can_spray else "#dc3545"
 
-        st.markdown("#### 🌦️ الطقس")
+        # تنسيق كروت الطقس بشكل أفقي
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("🌡️ الحرارة", f"{temp}°")
-        col2.metric("💨 الرياح", f"{wind}")
-        col3.metric("💧 الرطوبة", f"{curr['relative_humidity_2m']}%")
-        col4.markdown(f'<div style="background:{spray_bg};padding:10px;border-radius:5px;text-align:center;color:white;font-size:0.7rem;"><b>{spray_msg}</b></div>', unsafe_allow_html=True)
+        col1.metric("🌡️", f"{temp}°")
+        col2.metric("💨", f"{wind}")
+        col3.metric("💧", f"{curr['relative_humidity_2m']}%")
+        col4.markdown(f'<div style="background:{spray_bg}; border-radius:5px; text-align:center; color:white; padding:5px; margin-top:5px; font-size:0.7rem;">رش: {spray_msg}</div>', unsafe_allow_html=True)
 
     # ب) زر التحليل
-    st.write("") # مسافة
+    st.write("")
     if st.button("🚀 تحليل الأرض الآن", type="primary"):
-        with st.spinner('جاري معالجة الصور الفضائية...'):
+        with st.spinner('جاري المسح الفضائي...'):
             try:
                 raw_data = fetch_satellite_data(polygon)
                 ndvi_img = raw_data[:, :, 0]
@@ -194,12 +201,11 @@ if map_output and map_output.get("all_drawings"):
                 mask = ndvi_img > -0.5
                 
                 # التبويبات
-                tab1, tab2, tab3, tab4 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد", "📄 تقرير"])
+                tab1, tab2, tab3 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد"])
                 
-                # 1. النمو
                 with tab1:
                     avg_ndvi = np.mean(ndvi_img[mask])
-                    st.metric("مؤشر الغطاء النباتي (NDVI)", f"{avg_ndvi:.2f}")
+                    st.metric("معدل الغطاء النباتي", f"{avg_ndvi:.2f}")
                     fig, ax = plt.subplots(figsize=(6,4))
                     im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
                     plt.colorbar(im)
@@ -207,16 +213,10 @@ if map_output and map_output.get("all_drawings"):
                     fig.patch.set_facecolor('#1e2130')
                     ax.set_title(fix_text("خريطة الكثافة"), color='white')
                     st.pyplot(fig)
-                    
-                    st.caption("📈 تطور النمو (محاكاة):")
-                    dates = pd.date_range(end=date.today(), periods=6, freq='M')
-                    values = [avg_ndvi * (0.7 + 0.05*i) for i in range(6)]
-                    st.line_chart(pd.DataFrame({"تاريخ": dates, "نمو": values}).set_index("تاريخ"), color="#28a745")
 
-                # 2. المياه
                 with tab2:
                     avg_ndwi = np.mean(ndwi_img[mask])
-                    st.metric("مؤشر الرطوبة (NDWI)", f"{avg_ndwi:.2f}")
+                    st.metric("معدل الرطوبة", f"{avg_ndwi:.2f}")
                     fig2, ax2 = plt.subplots(figsize=(6,4))
                     im2 = ax2.imshow(ndwi_img, cmap='Blues', vmin=-0.2, vmax=0.6)
                     plt.colorbar(im2)
@@ -225,49 +225,22 @@ if map_output and map_output.get("all_drawings"):
                     ax2.set_title(fix_text("خريطة المياه"), color='white')
                     st.pyplot(fig2)
 
-                # 3. التسميد
                 with tab3:
                     valid = ndvi_img[mask]
                     if len(valid) > 0:
                         q1, q2 = np.percentile(valid, [33, 66])
                         zones = np.zeros_like(ndvi_img)
                         zones[mask] = 1; zones[ndvi_img > q1] = 2; zones[ndvi_img > q2] = 3; zones[~mask]=0
-                        
                         cmap = mcolors.ListedColormap(['black', '#ff4d4d', '#ffcc00', '#28a745'])
                         norm = mcolors.BoundaryNorm([0,1,2,3,4], cmap.N)
-                        
                         fig3, ax3 = plt.subplots(figsize=(6,4))
                         im3 = ax3.imshow(zones, cmap=cmap, norm=norm)
                         ax3.axis('off')
                         fig3.patch.set_facecolor('#1e2130')
-                        
-                        import matplotlib.patches as mpatches
-                        patches = [mpatches.Patch(color='#28a745', label=fix_text('قوي')),
-                                  mpatches.Patch(color='#ffcc00', label=fix_text('متوسط')),
-                                  mpatches.Patch(color='#ff4d4d', label=fix_text('ضعيف'))]
-                        ax3.legend(handles=patches, loc='lower right', facecolor='white')
-                        ax3.set_title(fix_text("خريطة التسميد"), color='white')
                         st.pyplot(fig3)
-
-                # 4. التقرير
-                with tab4:
-                    report_html = f"""
-                    <div dir="rtl" style="background:white; color:black; padding:15px; border-radius:10px;">
-                        <h4 style="color:#0078d4; margin:0;">AgriSight Pro</h4>
-                        <p style="color:gray; font-size:0.8rem;">{date.today()}</p>
-                        <hr>
-                        <b>النتائج:</b><br>
-                        - الغطاء النباتي: {avg_ndvi:.2f}<br>
-                        - الرطوبة: {avg_ndwi:.2f}<br>
-                        <br>
-                        <div style="background:#f0f2f6; padding:8px; font-size:0.9rem;">
-                        <b>التوصية:</b> المنطقة الحمراء تحتاج تدخل عاجل.
-                        </div>
-                    </div>
-                    """
-                    st.components.v1.html(report_html, height=300, scrolling=True)
+                        st.caption("أخضر: قوي | أصفر: متوسط | أحمر: ضعيف")
 
             except Exception as e:
                 st.error(f"خطأ: {str(e)}")
 else:
-    st.info("👆 ارسم الأرض على الخريطة أعلاه لتبدأ.")
+    st.info("👆 قم برسم المضلع على الخريطة للبدء.")
