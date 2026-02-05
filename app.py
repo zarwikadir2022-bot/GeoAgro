@@ -38,7 +38,7 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* إخفاء الشريط الجانبي */
+    /* إخفاء القوائم */
     [data-testid="stSidebar"] { display: none !important; }
     [data-testid="collapsedControl"] { display: none !important; }
     #MainMenu { visibility: hidden !important; }
@@ -53,18 +53,14 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* تعديل ارتفاع الخريطة في CSS أيضاً لتتوافق */
-    iframe { width: 100% !important; min-height: 250px !important; border-radius: 12px; }
+    /* الخريطة */
+    iframe { width: 100% !important; min-height: 300px !important; border-radius: 12px; }
     
     .stButton button { width: 100%; border-radius: 8px; font-weight: bold; font-family: 'Tajawal'; }
     
     .stTabs [data-baseweb="tab-list"] { 
         justify-content: center;
         flex-wrap: wrap;
-    }
-    .stTabs [data-baseweb="tab"] {
-        flex-grow: 1;
-        text-align: center;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -123,20 +119,9 @@ def fetch_satellite_data(coords_list):
     )
     return request.get_data()[0]
 
-# --- رأس الصفحة ---
+# --- الهيدر ---
 st.markdown("""
-<div style="
-    background: #1e2130; 
-    padding: 10px; 
-    border-radius: 12px; 
-    margin-bottom: 10px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: flex-start; 
-    gap: 15px; 
-    border: 1px solid #333;
-    direction: rtl;
-">
+<div style="background: #1e2130; padding: 10px; border-radius: 12px; margin-bottom: 15px; display: flex; align-items: center; justify-content: flex-start; gap: 15px; border: 1px solid #333; direction: rtl;">
     <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="50" style="background: white; border-radius: 50%; padding: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.3);">
     <div style="text-align: right;">
         <h2 style="margin: 0; color: white; font-size: 1.4rem; font-weight: 700; white-space: nowrap; font-family: 'Tajawal', sans-serif;">AgriSight Pro</h2>
@@ -148,90 +133,93 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# --- الخريطة (تم تصغير الارتفاع) ---
-m = folium.Map(location=[36.8, 10.1], zoom_start=10)
-folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
-folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
-folium.LayerControl().add_to(m)
-Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
+# --- تقسيم الشاشة (نصفين) ---
+# العمود الأيمن (c_map) للخريطة، والأيسر (c_res) للنتائج
+c_map, c_res = st.columns([1, 1])
 
-st.caption("📍 حدد الأرض:")
-# تم تقليل الارتفاع هنا إلى 250 بكسل
-map_output = st_folium(m, width="100%", height=250)
-
-# --- النتائج ---
-if map_output and map_output.get("all_drawings"):
-    drawings = map_output["all_drawings"]
-    polygon = drawings[-1]['geometry']['coordinates'][0]
-    centroid_lat = np.mean([p[1] for p in polygon])
-    centroid_lon = np.mean([p[0] for p in polygon])
+# 1. العمود الأيمن: الخريطة
+with c_map:
+    st.markdown("##### 📍 حدد الأرض:")
+    m = folium.Map(location=[36.8, 10.1], zoom_start=10)
+    folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
+    folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
+    folium.LayerControl().add_to(m)
+    Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':False,'marker':False,'polygon':True,'rectangle':True}).add_to(m)
     
-    st.markdown("---")
-    
-    weather = get_agri_weather(centroid_lat, centroid_lon)
-    if weather:
-        curr = weather['current']
-        wind = curr['wind_speed_10m']
-        temp = curr['temperature_2m']
-        can_spray = wind < 15 and curr['rain'] == 0
-        spray_msg = "ملائم" if can_spray else "خطر"
-        spray_bg = "#28a745" if can_spray else "#dc3545"
+    # الخريطة تأخذ عرض العمود فقط (50% من الشاشة)
+    map_output = st_folium(m, width="100%", height=350)
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("🌡️", f"{temp}°")
-        c2.metric("💨", f"{wind}")
-        c3.metric("💧", f"{curr['relative_humidity_2m']}%")
-        c4.markdown(f'<div style="background:{spray_bg}; border-radius:8px; text-align:center; color:white; padding:5px; font-size:0.7rem;"><b>رش:<br>{spray_msg}</b></div>', unsafe_allow_html=True)
+# 2. العمود الأيسر: النتائج والتحكم
+with c_res:
+    if map_output and map_output.get("all_drawings"):
+        drawings = map_output["all_drawings"]
+        polygon = drawings[-1]['geometry']['coordinates'][0]
+        centroid_lat = np.mean([p[1] for p in polygon])
+        centroid_lon = np.mean([p[0] for p in polygon])
+        
+        # الطقس
+        weather = get_agri_weather(centroid_lat, centroid_lon)
+        if weather:
+            curr = weather['current']
+            wind = curr['wind_speed_10m']
+            temp = curr['temperature_2m']
+            can_spray = wind < 15 and curr['rain'] == 0
+            spray_bg = "#28a745" if can_spray else "#dc3545"
 
-    st.write("")
-    if st.button("🚀 تحليل الأرض الآن", type="primary"):
-        with st.spinner('جاري المسح...'):
-            try:
-                raw_data = fetch_satellite_data(polygon)
-                ndvi_img = raw_data[:, :, 0]
-                ndwi_img = raw_data[:, :, 1]
-                mask = ndvi_img > -0.5
-                
-                tab1, tab2, tab3 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد"])
-                
-                with tab1:
-                    avg_ndvi = np.mean(ndvi_img[mask])
-                    st.metric("الغطاء النباتي (NDVI)", f"{avg_ndvi:.2f}")
-                    fig, ax = plt.subplots(figsize=(6,3.5)) # تصغير الرسم البياني قليلاً أيضاً
-                    im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
-                    plt.colorbar(im)
-                    ax.axis('off')
-                    fig.patch.set_facecolor('#1e2130')
-                    ax.set_title(fix_text("خريطة الكثافة"), color='white')
-                    st.pyplot(fig)
+            st.markdown("##### 🌦️ حالة الطقس:")
+            sc1, sc2, sc3 = st.columns(3)
+            sc1.metric("🌡️ الحرارة", f"{temp}°")
+            sc2.metric("💨 الرياح", f"{wind}")
+            sc3.markdown(f'<div style="background:{spray_bg}; border-radius:8px; text-align:center; color:white; padding:15px; margin-top:0px; font-size:0.8rem;"><b>رش المبيدات</b></div>', unsafe_allow_html=True)
 
-                with tab2:
-                    avg_ndwi = np.mean(ndwi_img[mask])
-                    st.metric("الرطوبة (NDWI)", f"{avg_ndwi:.2f}")
-                    fig2, ax2 = plt.subplots(figsize=(6,3.5))
-                    im2 = ax2.imshow(ndwi_img, cmap='Blues', vmin=-0.2, vmax=0.6)
-                    plt.colorbar(im2)
-                    ax2.axis('off')
-                    fig2.patch.set_facecolor('#1e2130')
-                    ax2.set_title(fix_text("خريطة المياه"), color='white')
-                    st.pyplot(fig2)
+        st.write("")
+        if st.button("🚀 تحليل الأرض الآن", type="primary"):
+            with st.spinner('جاري المسح الفضائي...'):
+                try:
+                    raw_data = fetch_satellite_data(polygon)
+                    ndvi_img = raw_data[:, :, 0]
+                    ndwi_img = raw_data[:, :, 1]
+                    mask = ndvi_img > -0.5
+                    
+                    tab1, tab2, tab3 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد"])
+                    
+                    with tab1:
+                        avg_ndvi = np.mean(ndvi_img[mask])
+                        st.metric("الغطاء النباتي (NDVI)", f"{avg_ndvi:.2f}")
+                        fig, ax = plt.subplots(figsize=(5,3))
+                        im = ax.imshow(ndvi_img, cmap='RdYlGn', vmin=0, vmax=0.9)
+                        plt.colorbar(im)
+                        ax.axis('off')
+                        fig.patch.set_facecolor('#0e1117') # لون الخلفية مطابق للتطبيق
+                        ax.set_title(fix_text("الكثافة"), color='white')
+                        st.pyplot(fig)
 
-                with tab3:
-                    valid = ndvi_img[mask]
-                    if len(valid) > 0:
-                        q1, q2 = np.percentile(valid, [33, 66])
-                        zones = np.zeros_like(ndvi_img)
-                        zones[mask] = 1; zones[ndvi_img > q1] = 2; zones[ndvi_img > q2] = 3; zones[~mask]=0
-                        cmap = mcolors.ListedColormap(['black', '#ff4d4d', '#ffcc00', '#28a745'])
-                        norm = mcolors.BoundaryNorm([0,1,2,3,4], cmap.N)
-                        fig3, ax3 = plt.subplots(figsize=(6,3.5))
-                        im3 = ax3.imshow(zones, cmap=cmap, norm=norm)
-                        ax3.axis('off')
-                        fig3.patch.set_facecolor('#1e2130')
-                        st.pyplot(fig3)
-                        st.info("الأحمر: يحتاج تسميد.")
+                    with tab2:
+                        avg_ndwi = np.mean(ndwi_img[mask])
+                        st.metric("الرطوبة (NDWI)", f"{avg_ndwi:.2f}")
+                        fig2, ax2 = plt.subplots(figsize=(5,3))
+                        im2 = ax2.imshow(ndwi_img, cmap='Blues', vmin=-0.2, vmax=0.6)
+                        plt.colorbar(im2)
+                        ax2.axis('off')
+                        fig2.patch.set_facecolor('#0e1117')
+                        ax2.set_title(fix_text("المياه"), color='white')
+                        st.pyplot(fig2)
 
-            except Exception as e:
-                st.error(f"خطأ: {str(e)}")
-else:
-    st.info("👆 ارسم المضلع.")
+                    with tab3:
+                        valid = ndvi_img[mask]
+                        if len(valid) > 0:
+                            q1, q2 = np.percentile(valid, [33, 66])
+                            zones = np.zeros_like(ndvi_img)
+                            zones[mask] = 1; zones[ndvi_img > q1] = 2; zones[ndvi_img > q2] = 3; zones[~mask]=0
+                            cmap = mcolors.ListedColormap(['black', '#ff4d4d', '#ffcc00', '#28a745'])
+                            norm = mcolors.BoundaryNorm([0,1,2,3,4], cmap.N)
+                            fig3, ax3 = plt.subplots(figsize=(5,3))
+                            im3 = ax3.imshow(zones, cmap=cmap, norm=norm)
+                            ax3.axis('off')
+                            fig3.patch.set_facecolor('#0e1117')
+                            st.pyplot(fig3)
+
+                except Exception as e:
+                    st.error(f"خطأ: {str(e)}")
+    else:
+        st.info("👈 ابدأ برسم الأرض على الخريطة يميناً.")
