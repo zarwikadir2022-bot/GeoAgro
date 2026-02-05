@@ -1,7 +1,9 @@
 streamlit
-sentinelhub>=3.10.0
 folium
 streamlit-folium
+sentinelhub
 matplotlib
-numpy
-shapely
+pandas
+requests
+arabic-reshaper
+python-bidi
