@@ -25,7 +25,7 @@ def fix_text(text):
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="AgriSight Pro", page_icon="🌾", layout="wide")
 
-# --- CSS: إصلاح مشاكل الموبايل والكتابة العمودية ---
+# --- CSS: تحسينات التصميم والموبايل ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -38,26 +38,20 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* منع تكسر العناوين نهائياً */
-    h1, h2, h3, .stTitle {
-        white-space: nowrap !important;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    
-    /* تنسيق خاص للشريط الجانبي في الموبايل */
-    [data-testid="stSidebar"] {
-        width: 300px !important;
-    }
-    
     /* تحسين عرض الخريطة لتملأ الشاشة */
     iframe { width: 100% !important; min-height: 400px; }
     
     /* تحسين الهوامش لتوسيع مساحة العرض */
     .block-container {
-        padding-top: 1.5rem !important;
+        padding-top: 1rem !important;
         padding-left: 0.5rem !important;
         padding-right: 0.5rem !important;
+    }
+    
+    /* تنسيق التبويبات */
+    .stTabs [data-baseweb="tab-list"] { 
+        justify-content: flex-end;
+        flex-wrap: wrap;
     }
     
     /* تنسيق صندوق الطقس */
@@ -68,7 +62,6 @@ st.markdown("""
         color: white;
         text-align: center;
         margin-bottom: 10px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -131,14 +124,24 @@ def fetch_satellite_data(coords_list):
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/drone-with-camera.png", width=60)
     
-    # استخدمنا HTML مباشر للتحكم في العنوان ومنع تكسره
+    # استخدام HTML لإجبار العنوان على البقاء أفقياً
     st.markdown("""
-        <h1 style='font-size: 1.5rem; white-space: nowrap; margin-bottom: 0;'>AgriSight Pro</h1>
-        <p style='color: gray; font-size: 0.9rem;'>منظومة الفلاحة الذكية</p>
+        <div style="text-align: right; direction: rtl; padding-bottom: 10px;">
+            <h1 style="
+                color: white; 
+                font-family: 'Tajawal', sans-serif; 
+                font-size: 22px !important; 
+                margin: 0; 
+                padding: 0; 
+                white-space: nowrap !important;
+                line-height: 1.5;
+            ">AgriSight Pro</h1>
+            <p style="color: #a0a0a0; font-size: 13px; margin: 0;">المنظومة الفلاحية الذكية</p>
+        </div>
     """, unsafe_allow_html=True)
     
     st.markdown("---")
-    st.info("👈 ارسم حدود الأرض على الخريطة")
+    st.info("👈 ارسم حدود الأرض على الخريطة للبدء")
 
 # تقسيم الأعمدة
 col_map, col_dash = st.columns([1.5, 1.2])
@@ -161,7 +164,8 @@ with col_map:
 
 with col_dash:
     if map_output and map_output.get("all_drawings"):
-        polygon = map_output["all_drawings"][-1]['geometry']['coordinates'][0]
+        drawings = map_output["all_drawings"]
+        polygon = drawings[-1]['geometry']['coordinates'][0]
         centroid_lat = np.mean([p[1] for p in polygon])
         centroid_lon = np.mean([p[0] for p in polygon])
         
