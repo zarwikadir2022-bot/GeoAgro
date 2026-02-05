@@ -25,7 +25,7 @@ def fix_text(text):
 # --- إعدادات الصفحة ---
 st.set_page_config(page_title="AgriSight Pro", page_icon="🌾", layout="wide", initial_sidebar_state="collapsed")
 
-# --- CSS: التصميم الشامل (إخفاء الشريط الجانبي + تحسينات الموبايل) ---
+# --- CSS: إخفاء الشريط الجانبي وتنسيق الموبايل ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
@@ -39,7 +39,7 @@ st.markdown("""
     
     .main { background-color: #0e1117; }
     
-    /* 2. إخفاء الشريط الجانبي والقوائم العلوية تماماً */
+    /* 2. إخفاء الشريط الجانبي تماماً */
     [data-testid="stSidebar"] { display: none !important; }
     [data-testid="collapsedControl"] { display: none !important; }
     #MainMenu { visibility: hidden !important; }
@@ -58,7 +58,7 @@ st.markdown("""
     /* 4. تحسين عرض الخريطة */
     iframe { width: 100% !important; min-height: 400px; border-radius: 12px; }
     
-    /* 5. تنسيق الأزرار لتكون بعرض كامل في الموبايل */
+    /* 5. تنسيق الأزرار */
     .stButton button { width: 100%; border-radius: 8px; font-weight: bold; font-family: 'Tajawal'; }
     
     /* 6. تنسيق التبويبات */
@@ -127,7 +127,7 @@ def fetch_satellite_data(coords_list):
     )
     return request.get_data()[0]
 
-# --- 1. رأس الصفحة (Header) - التصميم الجديد ---
+# --- 1. رأس الصفحة (Header) - التصميم النهائي ---
 st.markdown("""
 <div style="
     background: #1e2130; 
@@ -141,7 +141,12 @@ st.markdown("""
     border: 1px solid #333;
     direction: rtl;
 ">
-    <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="55" style="background: white; border-radius: 50%; padding: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.3);">
+    <img src="https://img.icons8.com/fluency/96/drone-with-camera.png" width="60" style="
+        background: white; 
+        border-radius: 50%; 
+        padding: 5px; 
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    ">
 
     <div style="text-align: right;">
         <h2 style="margin: 0; color: white; font-size: 1.6rem; font-weight: 700; white-space: nowrap; font-family: 'Tajawal', sans-serif;">AgriSight Pro</h2>
@@ -150,10 +155,11 @@ st.markdown("""
             <span style="color: #a0a0a0; font-size: 0.85rem;">متصل بالأقمار الصناعية</span>
         </div>
     </div>
+
 </div>
 """, unsafe_allow_html=True)
 
-# --- 2. الخريطة (Full Width) ---
+# --- 2. الخريطة (Full Screen) ---
 m = folium.Map(location=[36.8, 10.1], zoom_start=10)
 folium.TileLayer(tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri', name='قمر صناعي').add_to(m)
 folium.TileLayer('OpenStreetMap', name='طرقات').add_to(m)
@@ -163,7 +169,7 @@ Draw(export=False, position='topleft', draw_options={'polyline':False,'circle':F
 st.caption("📍 حدد الأرض على الخريطة:")
 map_output = st_folium(m, width="100%", height=400)
 
-# --- 3. النتائج والتحليل (تحت الخريطة) ---
+# --- 3. النتائج (تحت الخريطة) ---
 if map_output and map_output.get("all_drawings"):
     drawings = map_output["all_drawings"]
     polygon = drawings[-1]['geometry']['coordinates'][0]
@@ -172,7 +178,7 @@ if map_output and map_output.get("all_drawings"):
     
     st.markdown("---")
     
-    # أ) بيانات الطقس
+    # أ) الطقس
     weather = get_agri_weather(centroid_lat, centroid_lon)
     if weather:
         curr = weather['current']
@@ -191,7 +197,7 @@ if map_output and map_output.get("all_drawings"):
     # ب) زر التحليل
     st.write("")
     if st.button("🚀 تحليل الأرض الآن", type="primary"):
-        with st.spinner('جاري الاتصال بالقمر الصناعي...'):
+        with st.spinner('جاري المسح الفضائي...'):
             try:
                 raw_data = fetch_satellite_data(polygon)
                 ndvi_img = raw_data[:, :, 0]
@@ -201,7 +207,6 @@ if map_output and map_output.get("all_drawings"):
                 # التبويبات
                 tab1, tab2, tab3 = st.tabs(["🌱 النمو", "💧 المياه", "🚜 التسميد"])
                 
-                # تبويب النمو
                 with tab1:
                     avg_ndvi = np.mean(ndvi_img[mask])
                     st.metric("مؤشر الغطاء النباتي (NDVI)", f"{avg_ndvi:.2f}")
@@ -213,7 +218,6 @@ if map_output and map_output.get("all_drawings"):
                     ax.set_title(fix_text("خريطة الكثافة النباتية"), color='white')
                     st.pyplot(fig)
 
-                # تبويب المياه
                 with tab2:
                     avg_ndwi = np.mean(ndwi_img[mask])
                     st.metric("مؤشر الرطوبة (NDWI)", f"{avg_ndwi:.2f}")
@@ -225,7 +229,6 @@ if map_output and map_output.get("all_drawings"):
                     ax2.set_title(fix_text("خريطة المحتوى المائي"), color='white')
                     st.pyplot(fig2)
 
-                # تبويب التسميد
                 with tab3:
                     valid = ndvi_img[mask]
                     if len(valid) > 0:
@@ -239,9 +242,9 @@ if map_output and map_output.get("all_drawings"):
                         ax3.axis('off')
                         fig3.patch.set_facecolor('#1e2130')
                         st.pyplot(fig3)
-                        st.info("نصيحة: المناطق الحمراء تحتاج تركيزاً أعلى في التسميد.")
+                        st.info("نصيحة: المناطق الحمراء تحتاج دعماً بالأسمدة.")
 
             except Exception as e:
-                st.error(f"حدث خطأ أثناء التحليل: {str(e)}")
+                st.error(f"خطأ: {str(e)}")
 else:
     st.info("👆 الرجاء رسم المضلع (Polygon) على الخريطة للبدء.")
